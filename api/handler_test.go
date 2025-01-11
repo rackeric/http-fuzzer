@@ -36,6 +36,19 @@ func TestHandleStartJob(t *testing.T) {
 	mockFuzzer := new(MockFuzzerManager)
 	handler := NewHandler(mockFuzzer, nil, nil)
 
+	// Create test job data
+	testJob := &types.Job{
+		ID:         "test-job",
+		Target:     "http://example.com",
+		WordlistID: "test-wordlist",
+		Type:       "fuzzing",
+		Status:     "running",
+	}
+
+	// Mock both StartJob and GetJobs calls
+	mockFuzzer.On("StartJob", "http://example.com", "test-wordlist", "fuzzing").Return(nil)
+	mockFuzzer.On("GetJobs").Return([]*types.Job{testJob}, nil)
+
 	body := map[string]string{
 		"target":     "http://example.com",
 		"wordlistId": "test-wordlist",
@@ -45,12 +58,17 @@ func TestHandleStartJob(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/jobs/start", bytes.NewBuffer(jsonBody))
 	w := httptest.NewRecorder()
 
-	mockFuzzer.On("StartJob", "http://example.com", "test-wordlist", "fuzzing").Return(nil)
-
 	handler.handleStartJob(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	mockFuzzer.AssertExpectations(t)
+
+	// Verify response
+	var response *types.Job
+	err := json.NewDecoder(w.Body).Decode(&response)
+	assert.NoError(t, err)
+	assert.Equal(t, testJob.ID, response.ID)
+	assert.Equal(t, testJob.Target, response.Target)
 }
 
 func TestHandleGetJobs(t *testing.T) {

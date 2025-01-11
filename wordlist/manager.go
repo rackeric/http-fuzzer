@@ -9,14 +9,14 @@ import (
 
 type Manager struct {
 	baseDir string
-	lists   map[string]*Wordlist
+	lists   map[string]*types.Wordlist
 }
 
-type Wordlist struct {
-	ID    string
-	Name  string
-	Words []string
-}
+// type Wordlist struct {
+// 	ID    string
+// 	Name  string
+// 	Words []string
+// }
 
 type WordlistManager interface {
 	Get(id string) *types.Wordlist
@@ -38,10 +38,20 @@ func (m *Manager) Get(id string) *types.Wordlist {
 	}
 }
 
+func (m *Manager) GetByName(name string) *types.Wordlist {
+	var wordlist *types.Wordlist
+	for _, v := range m.lists {
+		if v.Name == name {
+			wordlist = v
+		}
+	}
+	return wordlist
+}
+
 // ADD ... TODO ...
 func (m *Manager) Add(name string, words []string) string {
 	id := utils.GenerateID()
-	m.lists[id] = &Wordlist{
+	m.lists[id] = &types.Wordlist{
 		ID:    id,
 		Name:  name,
 		Words: words,
@@ -73,6 +83,6 @@ func NewManager(baseDir string) (*Manager, error) {
 	// Initialize and return the Manager
 	return &Manager{
 		baseDir: baseDir,
-		lists:   make(map[string]*Wordlist),
+		lists:   make(map[string]*types.Wordlist),
 	}, nil
 }

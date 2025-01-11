@@ -15,12 +15,6 @@ type JobStore struct {
 	mu       sync.RWMutex
 }
 
-type JobStorer interface {
-	Save() error
-	GetJob(id string) (*types.Job, error)
-	ListJobs() ([]*types.Job, error)
-}
-
 func (s *JobStore) SaveJob(job *types.Job) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

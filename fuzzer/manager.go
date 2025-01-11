@@ -25,15 +25,15 @@ type Finding struct {
 type Manager struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
-	store       *storage.JobStore
-	wordlistMgr *wordlist.Manager
+	store       storage.JobStorer
+	wordlistMgr wordlist.WordlistStorer
 	rateLimit   float64
 	limiter     *rate.Limiter
 	jobs        map[string]*types.Job
 	mu          sync.RWMutex
 }
 
-func NewManager(ctx context.Context, store *storage.JobStore, wordlistMgr *wordlist.Manager, rateLimit float64) *Manager {
+func NewManager(ctx context.Context, store storage.JobStorer, wordlistMgr wordlist.WordlistStorer, rateLimit float64) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Manager{
 		ctx:         ctx,
@@ -48,8 +48,6 @@ func NewManager(ctx context.Context, store *storage.JobStore, wordlistMgr *wordl
 
 func (m *Manager) StartJob(target, wordlistID, jobType string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	job := &types.Job{
 		ID:         fmt.Sprintf("job-%d", len(m.jobs)+1),
 		Target:     target,
@@ -63,7 +61,15 @@ func (m *Manager) StartJob(target, wordlistID, jobType string) error {
 	// Save to both memory and persistent storage
 	m.jobs[job.ID] = job
 	if err := m.store.SaveJob(job); err != nil {
+		m.mu.Unlock()
 		return fmt.Errorf("failed to save job: %w", err)
+	}
+	m.mu.Unlock()
+
+	// Verify wordlist exists before starting goroutine
+	wordlist := m.wordlistMgr.Get(wordlistID)
+	if wordlist == nil {
+		return fmt.Errorf("wordlist not found: %s", wordlistID)
 	}
 
 	// Start actual fuzzing in a goroutine
@@ -180,8 +186,9 @@ func (m *Manager) runJob(job *types.Job) {
 	// 	m.updateJobStatus(job, "failed")
 	// 	return
 	// }
+	totalWords := len(wordlist.Words)
 
-	for _, word := range wordlist.Words {
+	for i, word := range wordlist.Words {
 		select {
 		case <-jobCtx.Done():
 			m.updateJobStatus(job, "stopped")
@@ -193,8 +200,28 @@ func (m *Manager) runJob(job *types.Job) {
 			}
 
 			// Simulate fuzzing request - replace with actual fuzzing logic
-			_ = word
-			time.Sleep(100 * time.Millisecond)
+
+			job.Progress = int(float64(i+1) / float64(totalWords) * 100)
+
+			if url := m.checkDirectory(job.Target, word); url != "" {
+				m.addFinding(job, url, "directory")
+			}
+
+			if url := m.checkSubdomain(job.Target, word); url != "" {
+				m.addFinding(job, url, "subdomain")
+				// Pass context to recursive call
+				go m.runJob(&types.Job{
+					Target:     url,
+					WordlistID: job.WordlistID,
+				})
+			}
+
+			if i%100 == 0 {
+				m.store.Save()
+			}
+
+			// _ = word
+			// time.Sleep(100 * time.Millisecond)
 		}
 	}
 

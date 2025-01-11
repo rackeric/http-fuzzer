@@ -4,9 +4,11 @@ import (
 	"context"
 	"fuzzer/types"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/time/rate"
 )
 
 // Mock dependencies
@@ -17,6 +19,13 @@ type MockWordlistManager struct {
 func (m *MockWordlistManager) Get(id string) *types.Wordlist {
 	args := m.Called(id)
 	return args.Get(0).(*types.Wordlist)
+	// return nil
+}
+
+func (m *MockWordlistManager) GetByName(name string) *types.Wordlist {
+	// args := m.Called(id)
+	//return args.Get(0).(*types.Wordlist)
+	return nil
 }
 
 func (m *MockWordlistManager) Add(name string, words []string) string {
@@ -31,6 +40,11 @@ func (m *MockWordlistManager) List() []*types.Wordlist {
 
 type MockJobStore struct {
 	mock.Mock
+}
+
+func (m *MockJobStore) SaveJob(job *types.Job) error {
+	args := m.Called(job)
+	return args.Error(0)
 }
 
 func (m *MockJobStore) Save() error {
@@ -58,18 +72,24 @@ func TestStartJob(t *testing.T) {
 		store:       mockStore,
 		wordlistMgr: mockWordlistMgr,
 		jobs:        make(map[string]*types.Job),
+		rateLimit:   10.0,
+		limiter:     rate.NewLimiter(rate.Limit(10.0), 1),
 	}
 
+	// Setup mock expectations
 	mockWordlistMgr.On("Get", "test-wordlist").Return(&types.Wordlist{
 		ID:    "test-wordlist",
 		Words: []string{"test1", "test2"},
-	})
+	}).Twice()
 
-	mockStore.On("Save").Return(nil)
+	mockStore.On("SaveJob", mock.AnythingOfType("*types.Job")).Return(nil).Once()
 
 	// Test starting a job
 	err := manager.StartJob("http://example.com", "test-wordlist", "fuzzing")
 	assert.NoError(t, err)
+
+	// Let the goroutine run
+	time.Sleep(100 * time.Millisecond)
 
 	// Verify job was created
 	assert.Len(t, manager.jobs, 1)
@@ -84,4 +104,8 @@ func TestStartJob(t *testing.T) {
 	assert.Equal(t, "running", job.Status)
 	assert.Equal(t, "http://example.com", job.Target)
 	assert.Equal(t, "test-wordlist", job.WordlistID)
+
+	// Verify mock expectations were met
+	mockStore.AssertExpectations(t)
+	mockWordlistMgr.AssertExpectations(t)
 }
