@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 
-	"fuzzer/api"
-	"fuzzer/fuzzer"
-	"fuzzer/storage"
-	"fuzzer/wordlist"
+	"fuzzer/internal/api"
+	"fuzzer/internal/fuzzer"
+	"fuzzer/internal/storage"
+	"fuzzer/internal/wordlist"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 	apiHandler := api.NewHandler(manager, wordlistMgr, store)
 
 	// Serve static files for UI
-	fs := http.FileServer(http.Dir("./static"))
+	fs := http.FileServer(http.Dir("./web/static"))
 	http.Handle("/", fs)
 
 	// API routes

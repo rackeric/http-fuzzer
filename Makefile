@@ -6,12 +6,12 @@ GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
-BINARY_NAME=myapp
+BINARY_NAME=http-fuzzer
 BINARY_UNIX=$(BINARY_NAME)_unix
 
 # Build parameters
 BUILD_DIR=build
-MAIN_FILE=main.go
+MAIN_FILE=cmd/main.go
 
 # Tool versions
 GOLANGCI_LINT_VERSION=v1.55.2

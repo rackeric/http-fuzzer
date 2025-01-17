@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 
-	"fuzzer/storage"
+	"fuzzer/internal/storage"
+	"fuzzer/internal/wordlist"
 	"fuzzer/types"
-	"fuzzer/wordlist"
 )
 
 type Handler struct {

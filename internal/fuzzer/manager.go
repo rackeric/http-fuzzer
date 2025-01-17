@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"fuzzer/storage"
+	"fuzzer/internal/storage"
+	"fuzzer/internal/wordlist"
 	"fuzzer/types"
-	"fuzzer/wordlist"
 
 	"golang.org/x/time/rate"
 )
