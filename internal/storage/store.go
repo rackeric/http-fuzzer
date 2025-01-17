@@ -23,11 +23,11 @@ func (s *JobStore) SaveJob(job *types.Job) error {
 
 	// Convert to a serializable format
 	type SerializableJob struct {
-		ID         string `json:"id"`
-		Target     string `json:"target"`
-		Status     string `json:"status"`
-		WordlistID string `json:"wordlistId"`
-		Type       string `json:"type"`
+		ID         string        `json:"id"`
+		Target     string        `json:"target"`
+		Status     string        `json:"status"`
+		WordlistID string        `json:"wordlistId"`
+		Type       types.JobType `json:"type"`
 		// Add other fields that need to be serialized
 	}
 

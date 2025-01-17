@@ -4,23 +4,18 @@ import (
 	"time"
 )
 
-// type Job struct {
-// 	ID         string    `json:"id"`
-// 	Target     string    `json:"target"`
-// 	Type       string    // "subdomain", "directory"
-// 	WordlistID string    `json:"wordlistId"`
-// 	Status     string    `json:"status"` // "running", "paused", "stopped", "completed"
-// 	Progress   float64   `json:"progress"`
-// 	Findings   []Finding `json:"findings"`
-// 	LastUpdate time.Time
-// 	CancelFunc context.CancelFunc `json:"cancelFunc"`
-// 	PauseChan  chan bool          `json:"pauseChan"`
-// }
+// Define custom types for job types
+type JobType string
+
+const (
+	DirectoryType JobType = "directory"
+	SubdomainType JobType = "subdomain"
+)
 
 type Job struct {
 	ID         string    `json:"id"`
 	Target     string    `json:"target"`
-	Type       string    `json:"type"`
+	Type       JobType   `json:"type"`
 	WordlistID string    `json:"wordlistId"`
 	Status     string    `json:"status"`
 	Progress   int       `json:"progress"`

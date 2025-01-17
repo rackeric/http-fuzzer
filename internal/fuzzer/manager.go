@@ -46,7 +46,7 @@ func NewManager(ctx context.Context, store storage.JobStorer, wordlistMgr wordli
 	}
 }
 
-func (m *Manager) StartJob(target, wordlistID, jobType string) error {
+func (m *Manager) StartJob(target, wordlistID string, jobType types.JobType) error {
 	m.mu.Lock()
 	job := &types.Job{
 		ID:         fmt.Sprintf("job-%d", len(m.jobs)+1),
@@ -201,17 +201,22 @@ func (m *Manager) runJob(job *types.Job) {
 
 			job.Progress = int(float64(i+1) / float64(totalWords) * 100)
 
-			if url := m.checkDirectory(job.Target, word); url != "" {
-				m.addFinding(job, url, "directory")
-			}
+			switch job.Type {
+			case types.DirectoryType:
+				if url := m.checkDirectory(job.Target, word); url != "" {
+					m.addFinding(job, url, string(types.DirectoryType))
+				}
 
-			if url := m.checkSubdomain(job.Target, word); url != "" {
-				m.addFinding(job, url, "subdomain")
-				// Pass context to recursive call
-				go m.runJob(&types.Job{
-					Target:     url,
-					WordlistID: job.WordlistID,
-				})
+			case types.SubdomainType:
+				if url := m.checkSubdomain(job.Target, word); url != "" {
+					m.addFinding(job, url, string(types.SubdomainType))
+					// Pass context to recursive call
+					go m.runJob(&types.Job{
+						Target:     url,
+						WordlistID: job.WordlistID,
+						Type:       types.SubdomainType,
+					})
+				}
 			}
 
 			if i%100 == 0 {

@@ -12,7 +12,7 @@ import (
 )
 
 type Handler struct {
-	fuzzerMgr   types.FuzzerManager // Changed from *fuzzer.Manager
+	fuzzerMgr   types.FuzzerManager
 	wordlistMgr *wordlist.Manager
 	store       *storage.JobStore
 }
@@ -63,9 +63,9 @@ func (h *Handler) handleJobs(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleStartJob(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Target     string `json:"target"`
-		WordlistID string `json:"wordlistId"`
-		Type       string `json:"type"`
+		Target     string        `json:"target"`
+		WordlistID string        `json:"wordlistId"`
+		Type       types.JobType `json:"type"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
