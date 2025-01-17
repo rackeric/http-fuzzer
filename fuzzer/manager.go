@@ -199,8 +199,6 @@ func (m *Manager) runJob(job *types.Job) {
 				continue
 			}
 
-			// Simulate fuzzing request - replace with actual fuzzing logic
-
 			job.Progress = int(float64(i+1) / float64(totalWords) * 100)
 
 			if url := m.checkDirectory(job.Target, word); url != "" {

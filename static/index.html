@@ -209,7 +209,7 @@
                 <div>Status: ${job.status || 'unknown'}</div>
                 <div>Found: ${(job.findings || []).length} results</div>
                 <div class="findings-container">
-                    ${(job.findings || []).slice(-5).map(finding => `
+                    ${(job.findings || []).slice(-50).map(finding => `
                         <div class="finding-item">
                             ${finding.type === 'subdomain' ? '🌐' : '📁'} ${finding.url}
                         </div>
