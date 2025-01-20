@@ -17,7 +17,7 @@ type MockFuzzerManager struct {
 	mock.Mock
 }
 
-func (m *MockFuzzerManager) StartJob(target, wordlistID, jobType string) error {
+func (m *MockFuzzerManager) StartJob(target, wordlistID string, jobType types.JobType) error {
 	args := m.Called(target, wordlistID, jobType)
 	return args.Error(0)
 }
@@ -41,18 +41,18 @@ func TestHandleStartJob(t *testing.T) {
 		ID:         "test-job",
 		Target:     "http://example.com",
 		WordlistID: "test-wordlist",
-		Type:       "fuzzing",
+		Type:       types.DirectoryType,
 		Status:     "running",
 	}
 
 	// Mock both StartJob and GetJobs calls
-	mockFuzzer.On("StartJob", "http://example.com", "test-wordlist", "fuzzing").Return(nil)
+	mockFuzzer.On("StartJob", "http://example.com", "test-wordlist", types.DirectoryType).Return(nil)
 	mockFuzzer.On("GetJobs").Return([]*types.Job{testJob}, nil)
 
 	body := map[string]string{
 		"target":     "http://example.com",
 		"wordlistId": "test-wordlist",
-		"type":       "fuzzing",
+		"type":       string(types.DirectoryType),
 	}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/api/jobs/start", bytes.NewBuffer(jsonBody))
@@ -81,7 +81,7 @@ func TestHandleGetJobs(t *testing.T) {
 			Target:     "http://example.com",
 			Status:     "running",
 			WordlistID: "test-wordlist",
-			Type:       "fuzzing",
+			Type:       types.DirectoryType,
 		},
 	}
 

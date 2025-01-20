@@ -19,12 +19,9 @@ type MockWordlistManager struct {
 func (m *MockWordlistManager) Get(id string) *types.Wordlist {
 	args := m.Called(id)
 	return args.Get(0).(*types.Wordlist)
-	// return nil
 }
 
 func (m *MockWordlistManager) GetByName(name string) *types.Wordlist {
-	// args := m.Called(id)
-	//return args.Get(0).(*types.Wordlist)
 	return nil
 }
 
@@ -80,12 +77,15 @@ func TestStartJob(t *testing.T) {
 	mockWordlistMgr.On("Get", "test-wordlist").Return(&types.Wordlist{
 		ID:    "test-wordlist",
 		Words: []string{"test1", "test2"},
-	}).Twice()
+	}).Times(2)
 
 	mockStore.On("SaveJob", mock.AnythingOfType("*types.Job")).Return(nil).Once()
 
+	// Add expectation for Save() method
+	mockStore.On("Save").Return(nil).Maybe()
+
 	// Test starting a job
-	err := manager.StartJob("http://example.com", "test-wordlist", "fuzzing")
+	err := manager.StartJob("http://example.com", "test-wordlist", types.DirectoryType)
 	assert.NoError(t, err)
 
 	// Let the goroutine run
@@ -104,6 +104,7 @@ func TestStartJob(t *testing.T) {
 	assert.Equal(t, "running", job.Status)
 	assert.Equal(t, "http://example.com", job.Target)
 	assert.Equal(t, "test-wordlist", job.WordlistID)
+	assert.Equal(t, types.DirectoryType, job.Type)
 
 	// Verify mock expectations were met
 	mockStore.AssertExpectations(t)

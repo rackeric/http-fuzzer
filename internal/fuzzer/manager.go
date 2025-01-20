@@ -2,10 +2,11 @@ package fuzzer
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
-	"strings"
+	"net/url"
 	"sync"
 	"time"
 
@@ -156,14 +157,89 @@ func (m *Manager) checkDirectory(target, word string) string {
 }
 
 func (m *Manager) checkSubdomain(target, word string) string {
-	baseHost := strings.Split(target, "://")[1]
-	subdomain := fmt.Sprintf("%s.%s", word, baseHost)
-
-	_, err := net.LookupHost(subdomain)
-	if err == nil {
-		return fmt.Sprintf("http://%s", subdomain)
+	// Parse the original target URL to get the base host and protocol
+	parsedTarget, err := url.Parse(target)
+	if err != nil {
+		return ""
 	}
+
+	// Form the subdomain
+	subdomain := fmt.Sprintf("%s.%s", word, parsedTarget.Host)
+
+	// Create HTTP client with custom settings
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+		// Don't follow redirects as they might reveal information
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	// Try both HTTP and HTTPS on the original host
+	protocols := []string{"http://", "https://"}
+	for _, protocol := range protocols {
+		// Create the request to the original host
+		baseURL := fmt.Sprintf("%s%s", protocol, parsedTarget.Host)
+		req, err := http.NewRequest("GET", baseURL, nil)
+		if err != nil {
+			continue
+		}
+
+		// Set the Host header to the subdomain we're testing
+		req.Host = subdomain
+
+		// Add common headers that might help with virtual host detection
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		// Read a small portion of the body to help with virtual host detection
+		bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		resp.Body.Close()
+
+		// Check if this might be a valid virtual host
+		// You might want to adjust these detection methods based on your needs
+		if isLikelyValidVHost(resp, bodyBytes) {
+			return fmt.Sprintf("%s%s", protocol, subdomain)
+		}
+	}
+
 	return ""
+}
+
+// isLikelyValidVHost checks if the response indicates a valid virtual host
+func isLikelyValidVHost(resp *http.Response, bodyBytes []byte) bool {
+	// Consider it valid if we get a successful response
+	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+		return true
+	}
+
+	// Check for specific status codes that might indicate a valid host
+	if resp.StatusCode == http.StatusUnauthorized ||
+		resp.StatusCode == http.StatusForbidden {
+		return true
+	}
+
+	// If we get a 404 or 500, check if it's a custom error page
+	// This might indicate a valid host with an error
+	if (resp.StatusCode == http.StatusNotFound ||
+		resp.StatusCode == http.StatusInternalServerError) &&
+		len(bodyBytes) > 512 {
+		return true
+	}
+
+	return false
 }
 
 func (m *Manager) addFinding(job *types.Job, url, findingType string) {
