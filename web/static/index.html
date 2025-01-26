@@ -129,7 +129,7 @@
                 const wordlists = await response.json();
                 const select = document.getElementById('wordlist');
                 select.innerHTML = wordlists.map(wl => 
-                    `<option value="${wl.id}">${wl.name}</option>`
+                    `<option value="${wl.id}">${wl.name} (Id: ${wl.id})</option>`
                 ).join('');
             } catch (err) {
                 console.error('Error fetching wordlists:', err);
@@ -189,11 +189,14 @@
         }
 
         function displayJobs(jobs) {
+        // Sort jobs by ID before rendering
+        const sortedJobs = jobs.sort((a, b) => a.id.localeCompare(b.id));
+
         const container = document.getElementById('jobs-container');
         container.innerHTML = jobs.map(job => `
             <div class="job-card">
                 <div class="job-header">
-                    <h3>${job.target || 'Unknown Target'} - ${job.type || 'Unknown Type'}</h3>
+                    <h3>${job.target || 'Unknown Target'} - ${job.type || 'Unknown Type'} (${job.id || 'Unknown ID'})</h3>
                     <div>
                         ${job.status === 'running' ? `
                             <button onclick="controlJob('${job.id}', 'pause')">Pause</button>
@@ -206,6 +209,8 @@
                 <div class="progress-bar">
                     <div class="progress-bar-fill" style="width: ${job.progress || 0}%"></div>
                 </div>
+                <div>Start Time: ${job.startTime || 'unknown'}</div>
+                <div>Wordlist: ${job.wordlistId || 'unknown'}</div>
                 <div>Status: ${job.status || 'unknown'}</div>
                 <div>Found: ${(job.findings || []).length} results</div>
                 <div class="findings-container">
