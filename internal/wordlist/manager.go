@@ -3,6 +3,7 @@ package wordlist
 import (
 	"os"
 
+	"fuzzer/internal/logging"
 	"fuzzer/types"
 	"fuzzer/utils"
 )
@@ -12,25 +13,14 @@ type Manager struct {
 	lists   map[string]*types.Wordlist
 }
 
-// type Wordlist struct {
-// 	ID    string
-// 	Name  string
-// 	Words []string
-// }
-
-type WordlistManager interface {
-	Get(id string) *types.Wordlist
-	Add(name string, words []string) string
-	List() []*types.Wordlist
-}
-
-// Get retrieves a wordlist by its ID from the Manager.
 func (m *Manager) Get(id string) *types.Wordlist {
 	wordlist, exists := m.lists[id]
 	if !exists {
+		logging.Debug("Wordlist not found with ID: %s", id)
 		return nil
 	}
 
+	logging.Debug("Retrieved wordlist: ID=%s Name=%s", wordlist.ID, wordlist.Name)
 	return &types.Wordlist{
 		ID:    wordlist.ID,
 		Name:  wordlist.Name,
@@ -39,16 +29,20 @@ func (m *Manager) Get(id string) *types.Wordlist {
 }
 
 func (m *Manager) GetByName(name string) *types.Wordlist {
-	var wordlist *types.Wordlist
 	for _, v := range m.lists {
 		if v.Name == name {
-			wordlist = v
+			logging.Debug("Retrieved wordlist by name: Name=%s ID=%s", name, v.ID)
+			return &types.Wordlist{
+				ID:    v.ID,
+				Name:  v.Name,
+				Words: v.Words,
+			}
 		}
 	}
-	return wordlist
+	logging.Debug("No wordlist found with name: %s", name)
+	return nil
 }
 
-// ADD ... TODO ...
 func (m *Manager) Add(name string, words []string) string {
 	id := utils.GenerateID()
 	m.lists[id] = &types.Wordlist{
@@ -56,10 +50,10 @@ func (m *Manager) Add(name string, words []string) string {
 		Name:  name,
 		Words: words,
 	}
+	logging.Info("Added new wordlist: ID=%s Name=%s Words=%d", id, name, len(words))
 	return id
 }
 
-// List returns all wordlists stored in the Manager as a slice of *types.Wordlist.
 func (m *Manager) List() []*types.Wordlist {
 	wordlists := make([]*types.Wordlist, 0, len(m.lists))
 	for _, wl := range m.lists {
@@ -69,16 +63,19 @@ func (m *Manager) List() []*types.Wordlist {
 			Words: wl.Words,
 		})
 	}
+
+	logging.Info("Listed wordlists: Total=%d", len(wordlists))
 	return wordlists
 }
 
-// NewManager initializes and returns a Manager instance.
-// It creates the base directory if it does not exist.
 func NewManager(baseDir string) (*Manager, error) {
 	// Ensure the base directory exists
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
+		logging.Error("Failed to create wordlist base directory: %v", err)
 		return nil, err
 	}
+
+	logging.Info("Initializing wordlist manager with base directory: %s", baseDir)
 
 	// Initialize and return the Manager
 	return &Manager{

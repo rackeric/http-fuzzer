@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 
+	"fuzzer/internal/logging"
 	"fuzzer/types"
 )
 
@@ -19,6 +20,8 @@ func (s *JobStore) SaveJob(job *types.Job) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	logging.Debug("Saving job with ID: %s", job.ID)
+
 	s.jobs[job.ID] = job
 
 	// Convert to a serializable format
@@ -28,7 +31,6 @@ func (s *JobStore) SaveJob(job *types.Job) error {
 		Status     string        `json:"status"`
 		WordlistID string        `json:"wordlistId"`
 		Type       types.JobType `json:"type"`
-		// Add other fields that need to be serialized
 	}
 
 	serializableJobs := make(map[string]*SerializableJob)
@@ -44,41 +46,65 @@ func (s *JobStore) SaveJob(job *types.Job) error {
 
 	file, err := os.Create(s.filename)
 	if err != nil {
+		logging.Error("Failed to create file %s: %v", s.filename, err)
 		return err
 	}
 	defer file.Close()
 
-	return json.NewEncoder(file).Encode(serializableJobs)
+	err = json.NewEncoder(file).Encode(serializableJobs)
+	if err != nil {
+		logging.Error("Failed to encode jobs: %v", err)
+		return err
+	}
+
+	logging.Info("Successfully saved %d jobs to %s", len(serializableJobs), s.filename)
+	return nil
 }
 
 func (s *JobStore) Save() error {
 	data, err := json.Marshal(s.jobs)
 	if err != nil {
+		logging.Error("Failed to marshal jobs: %v", err)
 		return err
 	}
-	return os.WriteFile(s.filename, data, 0644)
+
+	err = os.WriteFile(s.filename, data, 0644)
+	if err != nil {
+		logging.Error("Failed to write jobs to file %s: %v", s.filename, err)
+		return err
+	}
+
+	logging.Info("Successfully saved %d jobs to %s", len(s.jobs), s.filename)
+	return nil
 }
 
-// GetJob retrieves a job by its ID from the JobStore.
 func (s *JobStore) GetJob(id string) (*types.Job, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	job, exists := s.jobs[id]
 	if !exists {
+		logging.Debug("Job not found with ID: %s", id)
 		return nil, errors.New("job not found")
 	}
+
+	logging.Debug("Retrieved job with ID: %s", id)
 	return job, nil
 }
 
-// ListJobs returns all jobs stored in the JobStore as a slice.
 func (s *JobStore) ListJobs() ([]*types.Job, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	jobs := make([]*types.Job, 0, len(s.jobs))
 	for _, job := range s.jobs {
 		jobs = append(jobs, job)
 	}
+
+	logging.Info("Listed %d jobs", len(jobs))
 	return jobs, nil
 }
 
-// NewJobStore initializes and returns a JobStore instance.
-// If the file at filepath exists, it attempts to load existing jobs from it.
 func NewJobStore(filepath string) (*JobStore, error) {
 	store := &JobStore{
 		filename: filepath,
@@ -87,21 +113,24 @@ func NewJobStore(filepath string) (*JobStore, error) {
 
 	// Check if the file exists
 	if _, err := os.Stat(filepath); errors.Is(err, os.ErrNotExist) {
-		// File doesn't exist, return an empty JobStore
+		logging.Info("Creating new job store file: %s", filepath)
 		return store, nil
 	}
 
 	// Read the file
 	data, err := os.ReadFile(filepath)
 	if err != nil {
+		logging.Error("Failed to read job store file %s: %v", filepath, err)
 		return nil, err
 	}
 
 	// Unmarshal the data into the jobs map
-	if len(data) > 0 { // Only attempt to unmarshal if the file is not empty
+	if len(data) > 0 {
 		if err := json.Unmarshal(data, &store.jobs); err != nil {
+			logging.Error("Failed to unmarshal job store data: %v", err)
 			return nil, err
 		}
+		logging.Info("Loaded %d jobs from %s", len(store.jobs), filepath)
 	}
 
 	return store, nil

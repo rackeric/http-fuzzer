@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"fuzzer/internal/logging"
 	"fuzzer/internal/storage"
 	"fuzzer/internal/wordlist"
 	"fuzzer/types"
@@ -36,6 +37,7 @@ type Manager struct {
 
 func NewManager(ctx context.Context, store storage.JobStorer, wordlistMgr wordlist.WordlistStorer, rateLimit float64) *Manager {
 	ctx, cancel := context.WithCancel(ctx)
+	logging.Info("Created new fuzzer manager with rate limit: %f", rateLimit)
 	return &Manager{
 		ctx:         ctx,
 		cancel:      cancel,
@@ -59,10 +61,13 @@ func (m *Manager) StartJob(target, wordlistID string, jobType types.JobType) err
 		Findings:   make([]types.Finding, 0),
 	}
 
+	logging.Info("Starting new job: ID=%s Target=%s Type=%s", job.ID, target, jobType)
+
 	// Save to both memory and persistent storage
 	m.jobs[job.ID] = job
 	if err := m.store.SaveJob(job); err != nil {
 		m.mu.Unlock()
+		logging.Error("Failed to save job: %v", err)
 		return fmt.Errorf("failed to save job: %w", err)
 	}
 	m.mu.Unlock()
@@ -70,6 +75,7 @@ func (m *Manager) StartJob(target, wordlistID string, jobType types.JobType) err
 	// Verify wordlist exists before starting goroutine
 	wordlist := m.wordlistMgr.Get(wordlistID)
 	if wordlist == nil {
+		logging.Error("Wordlist not found: %s", wordlistID)
 		return fmt.Errorf("wordlist not found: %s", wordlistID)
 	}
 
@@ -93,6 +99,8 @@ func (m *Manager) GetJobs() ([]*types.Job, error) {
 		}
 	}
 
+	logging.Info("Retrieved %d jobs", len(m.jobs))
+
 	// Return all jobs from our in-memory map
 	jobs := make([]*types.Job, 0, len(m.jobs))
 	for _, job := range m.jobs {
@@ -101,45 +109,102 @@ func (m *Manager) GetJobs() ([]*types.Job, error) {
 	return jobs, nil
 }
 
-// func (m *Manager) PauseJob(jobID string) error {
-// 	m.mu.Lock()
-// 	job := m.jobs[jobID]
-// 	m.mu.Unlock()
-
-// 	if job != nil && job.Status == "running" {
-// 		job.Status = "paused"
-// 		job.PauseChan <- true
-// 	}
-// 	return nil
-// }
-
-// func (m *Manager) ResumeJob(jobID string) error {
-// 	m.mu.Lock()
-// 	job := m.jobs[jobID]
-// 	m.mu.Unlock()
-
-// 	if job != nil && job.Status == "paused" {
-// 		job.Status = "running"
-// 		job.PauseChan <- false
-// 	}
-// 	return nil
-// }
-
 func (m *Manager) StopJob(jobID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	job, exists := m.jobs[jobID]
 	if !exists {
+		logging.Error("Attempted to stop non-existent job: %s", jobID)
 		return fmt.Errorf("job not found: %s", jobID)
 	}
 
+	logging.Info("Stopping job: %s", jobID)
 	job.Status = "stopped"
 	if err := m.store.SaveJob(job); err != nil {
+		logging.Error("Failed to save stopped job status: %v", err)
 		return fmt.Errorf("failed to save job status: %w", err)
 	}
 
 	return nil
+}
+
+func (m *Manager) runJob(job *types.Job) {
+	jobCtx, cancel := context.WithCancel(m.ctx)
+	defer cancel()
+
+	logging.Info("Running job: ID=%s Target=%s Type=%s", job.ID, job.Target, job.Type)
+
+	wordlist := m.wordlistMgr.Get(job.WordlistID)
+	if wordlist == nil {
+		logging.Error("Failed to get wordlist for job: %s", job.ID)
+		m.updateJobStatus(job, "failed")
+		return
+	}
+	totalWords := len(wordlist.Words)
+
+	for i, word := range wordlist.Words {
+		select {
+		case <-jobCtx.Done():
+			logging.Info("Job stopped: %s", job.ID)
+			m.updateJobStatus(job, "stopped")
+			return
+		default:
+			err := m.limiter.Wait(jobCtx)
+			if err != nil {
+				logging.Debug("Rate limiter error: %v", err)
+				continue
+			}
+
+			job.Progress = int(float64(i+1) / float64(totalWords) * 100)
+
+			switch job.Type {
+			case types.DirectoryType:
+				if url := m.checkDirectory(job.Target, word); url != "" {
+					logging.Info("Directory found: %s", url)
+					m.addFinding(job, url, string(types.DirectoryType))
+				}
+
+			case types.SubdomainType:
+				if url := m.checkSubdomain(job.Target, word); url != "" {
+					logging.Info("Subdomain found: %s", url)
+					m.addFinding(job, url, string(types.SubdomainType))
+					// Pass context to recursive call
+					go m.runJob(&types.Job{
+						Target:     url,
+						WordlistID: job.WordlistID,
+						Type:       types.SubdomainType,
+					})
+				}
+			}
+
+			if i%100 == 0 {
+				logging.Debug("Saving job progress: %d%%", job.Progress)
+				m.store.Save()
+			}
+		}
+	}
+
+	logging.Info("Job completed: %s", job.ID)
+	m.updateJobStatus(job, "completed")
+}
+
+func (m *Manager) updateJobStatus(job *types.Job, status string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	logging.Info("Updating job status: ID=%s Status=%s", job.ID, status)
+	job.Status = status
+	m.store.SaveJob(job)
+}
+
+func (m *Manager) UpdateRateLimit(newLimit float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	logging.Info("Updating rate limit from %f to %f", m.rateLimit, newLimit)
+	m.rateLimit = newLimit
+	m.limiter = rate.NewLimiter(rate.Limit(newLimit), 1)
 }
 
 func (m *Manager) checkDirectory(target, word string) string {
@@ -251,74 +316,4 @@ func (m *Manager) addFinding(job *types.Job, url, findingType string) {
 		Type:  findingType,
 		Found: time.Now(),
 	})
-}
-
-func (m *Manager) runJob(job *types.Job) {
-	jobCtx, cancel := context.WithCancel(m.ctx)
-	defer cancel()
-
-	wordlist := m.wordlistMgr.Get(job.WordlistID) //TODO: should return error
-	// if err != nil {
-	// 	m.updateJobStatus(job, "failed")
-	// 	return
-	// }
-	totalWords := len(wordlist.Words)
-
-	for i, word := range wordlist.Words {
-		select {
-		case <-jobCtx.Done():
-			m.updateJobStatus(job, "stopped")
-			return
-		default:
-			err := m.limiter.Wait(jobCtx)
-			if err != nil {
-				continue
-			}
-
-			job.Progress = int(float64(i+1) / float64(totalWords) * 100)
-
-			switch job.Type {
-			case types.DirectoryType:
-				if url := m.checkDirectory(job.Target, word); url != "" {
-					m.addFinding(job, url, string(types.DirectoryType))
-				}
-
-			case types.SubdomainType:
-				if url := m.checkSubdomain(job.Target, word); url != "" {
-					m.addFinding(job, url, string(types.SubdomainType))
-					// Pass context to recursive call
-					go m.runJob(&types.Job{
-						Target:     url,
-						WordlistID: job.WordlistID,
-						Type:       types.SubdomainType,
-					})
-				}
-			}
-
-			if i%100 == 0 {
-				m.store.Save()
-			}
-
-			// _ = word
-			// time.Sleep(100 * time.Millisecond)
-		}
-	}
-
-	m.updateJobStatus(job, "completed")
-}
-
-func (m *Manager) updateJobStatus(job *types.Job, status string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	job.Status = status
-	m.store.SaveJob(job)
-}
-
-func (m *Manager) UpdateRateLimit(newLimit float64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.rateLimit = newLimit
-	m.limiter = rate.NewLimiter(rate.Limit(newLimit), 1)
 }
