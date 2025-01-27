@@ -129,6 +129,26 @@ func (m *Manager) StopJob(jobID string) error {
 	return nil
 }
 
+func (m *Manager) DeleteJob(jobID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, exists := m.jobs[jobID]
+	if !exists {
+		logging.Error("Attempted to delete non-existent job: %s", jobID)
+		return fmt.Errorf("job not found: %s", jobID)
+	}
+
+	logging.Info("Deleting job: %s", jobID)
+	delete(m.jobs, jobID)
+	if err := m.store.DeleteJob(jobID); err != nil {
+		logging.Error("Failed to delete job: %v", err)
+		return fmt.Errorf("failed to delete job: %w", err)
+	}
+	m.store.Save()
+	return nil
+}
+
 func (m *Manager) runJob(job *types.Job) {
 	jobCtx, cancel := context.WithCancel(m.ctx)
 	defer cancel()
