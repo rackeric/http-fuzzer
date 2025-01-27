@@ -92,6 +92,21 @@ func (s *JobStore) GetJob(id string) (*types.Job, error) {
 	return job, nil
 }
 
+func (s *JobStore) DeleteJob(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.jobs[id]; !exists {
+		logging.Debug("Attempted to delete non-existent job with ID: %s", id)
+		return errors.New("job not found")
+	}
+
+	delete(s.jobs, id)
+	s.Save()
+	logging.Debug("Deleted job with ID: %s", id)
+	return nil
+}
+
 func (s *JobStore) ListJobs() ([]*types.Job, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

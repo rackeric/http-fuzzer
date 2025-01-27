@@ -35,6 +35,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleStartJob(w, r)
 	case "/api/jobs/stop":
 		h.handleStopJob(w, r)
+	case "/api/jobs/delete":
+		h.handleDeleteJob(w, r)
 	case "/api/wordlists":
 		h.handleWordlists(w, r)
 	case "/api/wordlists/add":
@@ -45,6 +47,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		logging.Error("Not found: %s", r.URL.Path)
 		http.NotFound(w, r)
 	}
+}
+
+func (h *Handler) handleDeleteJob(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		JobID string `json:"jobId"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logging.Error("Invalid stop job request: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	logging.Info("Deleting job: JobID=%s", req.JobID)
+
+	if err := h.fuzzerMgr.DeleteJob(req.JobID); err != nil {
+		logging.Error("Failed to delete job: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) handleJobs(w http.ResponseWriter, r *http.Request) {

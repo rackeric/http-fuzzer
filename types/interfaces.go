@@ -4,4 +4,5 @@ type FuzzerManager interface {
 	StartJob(target, wordlistID string, jobType JobType) error
 	StopJob(jobID string) error
 	GetJobs() ([]*Job, error)
+	DeleteJob(jobID string) error
 }
