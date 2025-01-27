@@ -9,7 +9,9 @@ To start the API server:
 make run
 ```
 
-Then, open a web browser to `http://localhost:8080/`.
+Then, open a web browser to `http://localhost:8080/`. Upload a wordlist and select a fuzzing type, either directory or sub-domain.
+
+![image](https://github.com/user-attachments/assets/3c08953a-7d85-456a-a596-9cdec9eeb4ca)
 
 More options are found with:
 ```
