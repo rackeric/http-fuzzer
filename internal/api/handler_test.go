@@ -32,6 +32,11 @@ func (m *MockFuzzerManager) GetJobs() ([]*types.Job, error) {
 	return args.Get(0).([]*types.Job), nil
 }
 
+func (m *MockFuzzerManager) DeleteJob(jobID string) error {
+	args := m.Called(jobID)
+	return args.Error(0)
+}
+
 func TestHandleStartJob(t *testing.T) {
 	mockFuzzer := new(MockFuzzerManager)
 	handler := NewHandler(mockFuzzer, nil, nil)

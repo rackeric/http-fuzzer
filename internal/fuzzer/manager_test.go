@@ -59,6 +59,11 @@ func (m *MockJobStore) ListJobs() ([]*types.Job, error) {
 	return args.Get(0).([]*types.Job), args.Error(1)
 }
 
+func (m *MockJobStore) DeleteJob(id string) error {
+	args := m.Called()
+	return args.Error(0)
+}
+
 func TestStartJob(t *testing.T) {
 	ctx := context.Background()
 	mockStore := &MockJobStore{}
@@ -109,4 +114,6 @@ func TestStartJob(t *testing.T) {
 	// Verify mock expectations were met
 	mockStore.AssertExpectations(t)
 	mockWordlistMgr.AssertExpectations(t)
+
+	// TODO: add tests for delete job
 }
